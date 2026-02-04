@@ -384,6 +384,20 @@ a:hover {
     color: var(--primary-dark);
 }
 
+/* Key Skills */
+.key-skills {
+    font-size: 0.8rem;
+    color: var(--text-light);
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: #f8fafc;
+    border-radius: 6px;
+}
+
+.key-skills strong {
+    color: var(--text);
+}
+
 /* Reflection */
 .reflection {
     margin-top: 1.25rem;
