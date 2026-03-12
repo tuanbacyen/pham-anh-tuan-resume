@@ -264,9 +264,8 @@ a:hover {
     color: var(--text-light);
     margin-top: 1rem;
     display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.25rem;
+    flex-direction: column;
+    gap: 0.35rem;
 }
 
 .tag-legend-sample {
