@@ -258,6 +258,21 @@ a:hover {
     color: var(--text-light);
 }
 
+/* Tag Legend */
+.tag-legend {
+    font-size: 0.75rem;
+    color: var(--text-light);
+    margin-top: 1rem;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.tag-legend-sample {
+    pointer-events: none;
+}
+
 /* Education */
 .education-item h3 {
     font-size: 0.95rem;
