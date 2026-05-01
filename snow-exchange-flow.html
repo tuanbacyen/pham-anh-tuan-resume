@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sơ đồ Kiến trúc Hệ thống</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        background-color: #f8fafc;
+        margin: 0;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        font-family: sans-serif;
+      }
+      .flow-container {
+        background-color: #1e293b;
+        width: 1100px;
+        height: 650px;
+        position: relative;
+        overflow: hidden;
+        border-radius: 16px;
+        box-shadow:
+          0 20px 25px -5px rgb(0 0 0 / 0.1),
+          0 8px 10px -6px rgb(0 0 0 / 0.1);
+      }
+      .node {
+        position: absolute;
+        background: #334155;
+        border: 2px solid #38bdf8;
+        border-radius: 8px;
+        padding: 12px;
+        color: white;
+        text-align: center;
+        width: 170px;
+        height: 80px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        z-index: 10;
+      }
+      .db-node {
+        border-radius: 50% / 20%;
+        border-color: #94a3b8;
+      }
+      .kafka-node {
+        background: #475569;
+        border-color: #fbbf24;
+        width: 190px;
+      }
+      .engine-node {
+        border-color: #f43f5e;
+        background: #312e81;
+      }
+      .label {
+        font-size: 0.75rem;
+        font-weight: bold;
+        margin-bottom: 4px;
+        display: block;
+        color: #cbd5e1;
+      }
+
+      .particle {
+        position: absolute;
+        width: 27px;
+        height: 27px;
+        border-radius: 50%;
+        z-index: 15;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: bold;
+        color: white;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.6);
+        pointer-events: none;
+      }
+
+      svg {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+      path {
+        fill: none;
+        stroke: #475569;
+        stroke-width: 2;
+        stroke-dasharray: 5, 5;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="flow-container" id="container">
+      <svg id="connections"></svg>
+
+      <div id="frontend" class="node" style="top: 285px; left: 60px">
+        <span class="label">Client Layer</span>
+        <div class="font-bold">Frontend</div>
+      </div>
+
+      <div id="backend" class="node" style="top: 285px; left: 320px">
+        <span class="label">Server Layer</span>
+        <div class="font-bold">Backend (BE)</div>
+      </div>
+
+      <div id="postgresql" class="node db-node" style="top: 500px; left: 320px">
+        <span class="label">Primary DB</span>
+        <div class="font-bold">PostgreSQL</div>
+      </div>
+
+      <div id="kafka" class="node kafka-node" style="top: 285px; left: 590px">
+        <span class="label">Message Broker</span>
+        <div class="font-bold text-yellow-400">Kafka Cluster</div>
+      </div>
+
+      <div id="engine" class="node engine-node" style="top: 285px; left: 880px">
+        <span class="label">Core Logic</span>
+        <div class="font-bold text-rose-400">Engine</div>
+      </div>
+
+      <div id="rocksdb" class="node db-node" style="top: 500px; left: 880px">
+        <span class="label">Disk Persistence</span>
+        <div class="font-bold">RocksDB</div>
+      </div>
+    </div>
+
+    <script>
+      const messageCount = 4;
+      const BASE_SPEED = 1600;
+      const DB_SPEED = 800;
+      const ENGINE_PROCESS_TIME = 333;
+
+      let isEngineBusy = false;
+      const engineQueue = [];
+
+      const nodes = {
+        fe: { x: 145, y: 325 },
+        be: { x: 405, y: 325 },
+        pg: { x: 405, y: 540 },
+        kafka: { x: 685, y: 325 },
+        engine: { x: 965, y: 325 },
+        rocks: { x: 965, y: 540 },
+      };
+
+      const ports = {
+        be_right_top: { x: 405 + 85, y: 325 - 15 },
+        be_right_bottom: { x: 405 + 85, y: 325 + 15 },
+        kafka_left_top: { x: 685 - 95, y: 325 - 15 },
+        kafka_left_bottom: { x: 685 - 95, y: 325 + 15 },
+        kafka_right_top: { x: 685 + 95, y: 325 - 15 },
+        kafka_right_bottom: { x: 685 + 95, y: 325 + 15 },
+        engine_left_top: { x: 965 - 85, y: 325 - 15 },
+        engine_left_bottom: { x: 965 - 85, y: 325 + 15 },
+      };
+
+      const itemColors = {};
+
+      // Danh sách màu sắc đa dạng và phân biệt rõ ràng
+      const colorPalette = [
+        "#ef4444", // Red
+        "#f59e0b", // Amber
+        "#10b981", // Emerald
+        "#3b82f6", // Blue
+        "#8b5cf6", // Violet
+        "#ec4899", // Pink
+        "#06b6d4", // Cyan
+        "#f97316", // Orange
+        "#a855f7", // Purple
+        "#14b8a6", // Teal
+      ];
+
+      // Hàm xáo trộn mảng để lấy màu ngẫu nhiên không trùng lặp
+      function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+      }
+
+      function drawLines() {
+        const svg = document.getElementById("connections");
+        const paths = [
+          `M ${nodes.fe.x + 85} ${nodes.fe.y} L ${nodes.be.x - 85} ${nodes.be.y}`,
+          `M ${nodes.be.x} ${nodes.be.y + 40} L ${nodes.pg.x} ${nodes.pg.y - 40}`,
+          `M ${ports.be_right_top.x} ${ports.be_right_top.y} L ${ports.kafka_left_top.x} ${ports.kafka_left_top.y}`,
+          `M ${ports.kafka_right_top.x} ${ports.kafka_right_top.y} L ${ports.engine_left_top.x} ${ports.engine_left_top.y}`,
+          `M ${nodes.engine.x} ${nodes.engine.y + 40} L ${nodes.rocks.x} ${nodes.rocks.y - 40}`,
+          `M ${ports.engine_left_bottom.x} ${ports.engine_left_bottom.y} L ${ports.kafka_right_bottom.x} ${ports.kafka_right_bottom.y}`,
+          `M ${ports.kafka_left_bottom.x} ${ports.kafka_left_bottom.y} L ${ports.be_right_bottom.x} ${ports.be_right_bottom.y}`,
+        ];
+        svg.innerHTML = paths.map((p) => `<path d="${p}" />`).join("");
+      }
+
+      function createParticle(id) {
+        const p = document.createElement("div");
+        p.className = "particle";
+        p.style.backgroundColor = itemColors[id];
+        p.innerText = id;
+        p.style.display = "none";
+        document.getElementById("container").appendChild(p);
+        return p;
+      }
+
+      async function moveParticle(p, start, end, duration) {
+        if (!p) return;
+        return new Promise((resolve) => {
+          const startTime = performance.now();
+          function step(timestamp) {
+            const progress = Math.min((timestamp - startTime) / duration, 1);
+            const currentX = start.x + (end.x - start.x) * progress;
+            const currentY = start.y + (end.y - start.y) * progress;
+            p.style.left = `${currentX - 13.5}px`;
+            p.style.top = `${currentY - 13.5}px`;
+            p.style.display = "flex";
+            if (progress < 1) requestAnimationFrame(step);
+            else resolve();
+          }
+          requestAnimationFrame(step);
+        });
+      }
+
+      async function processMessage(id) {
+        const p = createParticle(id);
+        await moveParticle(
+          p,
+          nodes.fe,
+          nodes.be,
+          BASE_SPEED + Math.random() * 400,
+        );
+        await moveParticle(p, nodes.be, nodes.pg, DB_SPEED);
+        await moveParticle(p, nodes.pg, nodes.be, DB_SPEED);
+        await moveParticle(p, nodes.be, ports.be_right_top, 300);
+        await moveParticle(
+          p,
+          ports.be_right_top,
+          ports.kafka_left_top,
+          BASE_SPEED,
+        );
+        await moveParticle(p, ports.kafka_left_top, ports.kafka_right_top, 400);
+        await moveParticle(
+          p,
+          ports.kafka_right_top,
+          ports.engine_left_top,
+          BASE_SPEED,
+        );
+        engineQueue.push({ id, p });
+        checkQueue();
+      }
+
+      async function checkQueue() {
+        if (isEngineBusy || engineQueue.length === 0) return;
+        isEngineBusy = true;
+        const { id, p } = engineQueue.shift();
+        await moveParticle(p, ports.engine_left_top, nodes.engine, 150);
+        const persistToDisk = async () => {
+          const dp = createParticle(id);
+          await moveParticle(dp, nodes.engine, nodes.rocks, 266);
+          if (dp && dp.parentNode) dp.remove();
+        };
+        persistToDisk();
+        await new Promise((r) => setTimeout(r, ENGINE_PROCESS_TIME));
+        await moveParticle(p, nodes.engine, ports.engine_left_bottom, 150);
+        await moveParticle(
+          p,
+          ports.engine_left_bottom,
+          ports.kafka_right_bottom,
+          266,
+        );
+        isEngineBusy = false;
+        checkQueue();
+        await moveParticle(
+          p,
+          ports.kafka_right_bottom,
+          ports.kafka_left_bottom,
+          400,
+        );
+        await moveParticle(
+          p,
+          ports.kafka_left_bottom,
+          ports.be_right_bottom,
+          BASE_SPEED,
+        );
+        await moveParticle(p, ports.be_right_bottom, nodes.be, 300);
+        await moveParticle(p, nodes.be, nodes.pg, DB_SPEED);
+        await moveParticle(p, nodes.pg, nodes.be, DB_SPEED);
+        await moveParticle(p, nodes.be, nodes.fe, BASE_SPEED);
+        if (p && p.parentNode) p.remove();
+      }
+
+      async function runCycle() {
+        // Lấy một tập hợp màu ngẫu nhiên không trùng lặp cho chu kỳ này
+        const shuffledColors = shuffleArray([...colorPalette]);
+
+        const promises = [];
+        for (let i = 1; i <= messageCount; i++) {
+          // Gán màu cố định cho ID trong chu kỳ này
+          itemColors[i] = shuffledColors[i - 1];
+          promises.push(
+            new Promise((r) =>
+              setTimeout(() => r(processMessage(i)), Math.random() * 400),
+            ),
+          );
+        }
+        await Promise.all(promises);
+        setTimeout(runCycle, 4000);
+      }
+
+      window.onload = () => {
+        drawLines();
+        runCycle();
+      };
+    </script>
+  </body>
+</html>
+
